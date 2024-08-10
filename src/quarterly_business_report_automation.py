@@ -12,12 +12,19 @@ import requests
 import smartsheet
 
 
-# Load environment variables.
+# ====================== Environment / Global Variables =======================
 load_dotenv(override=True)
+
+# Initialize customer constant global variables.
+CUSTOMER_CONFIG_JSON = os.getenv('CUSTOMER_CONFIGS')
+CUSTOMER_CONFIGS = json.loads(CUSTOMER_CONFIG_JSON)
 
 # Initialize Opsgenie constant global variables.
 OPSGENIE_API_KEY = os.getenv('OPSGENIE_API_KEY')
 OPSGENIE_MAX_RESPONSE_LIMIT = 100
+
+# Initialize PRTG constant global variables.
+PRTG_MAX_RESPONSE_LIMIT = 50000
 
 # Initialize ServiceNow constant global variables.
 SERVICENOW_INSTANCE_NAME = os.getenv('SERVICENOW_INSTANCE_NAME')
@@ -36,14 +43,8 @@ SMARTSHEET_API_KEY = os.getenv('SMARTSHEET_API_KEY')
 SMARTSHEET_CLIENT = smartsheet.Smartsheet(access_token=SMARTSHEET_API_KEY)
 SMARTSHEET_MAX_ROW_DELETION = 100
 
-# Initialize PRTG constant global variables.
-PRTG_MAX_RESPONSE_LIMIT = 50000
 
-# Initialize other constant global variables.
-CUSTOMER_CONFIG_JSON = os.getenv('CUSTOMER_CONFIGS')
-CUSTOMER_CONFIGS = json.loads(CUSTOMER_CONFIG_JSON)
-
-
+# ================================== Classes ==================================
 class OpsgenieClient:
     """
     Represents a connection to an Opsgenie instance.
@@ -124,6 +125,7 @@ class OpsgenieClient:
             yield list_alerts_response.data
 
 
+# ================================= Functions =================================
 def clear_smartsheet(smartsheet_sheet: smartsheet.Smartsheet.models.sheet.Sheet) -> None:
     """
     Clears all rows in the provided Smartsheet.
@@ -811,9 +813,10 @@ if __name__ == "__main__":
     """
     Todo list:
         - For Opsgenie alerts, determine important tags (Storage, Networking,
-            Backup, Other, etc.) and put them in a new column for the Opsgenie
+            Backup, Server, <<AP>>, Other, etc.) and put them in a new column for the Opsgenie
             Smartsheets
+        - ServiceNow date columns should be datetime objects
         - Hard-type PRTG sensors and ServiceNow tickets
-        - Make ccxsapi PRTG account for Moderna's PRTG instance
+        - Make ccxsapi PRTG account for unique customer's PRTG instances
         - Convert username / passhash for PRTG to API token
     """
