@@ -1,0 +1,6 @@
+loguru
+pysnow
+python-dotenv
+python-magic-bin
+requests
+smartsheet-python-sdk
