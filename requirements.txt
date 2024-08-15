@@ -1,4 +1,5 @@
 loguru
+opsgenie_sdk
 pysnow
 python-dotenv
 python-magic-bin
