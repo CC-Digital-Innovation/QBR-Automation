@@ -50,7 +50,9 @@ SMARTSHEET_CLIENT = smartsheet.Smartsheet(access_token=SMARTSHEET_API_KEY)
 SMARTSHEET_MAX_ROW_DELETION = 100
 
 # Initialize other constant global variables.
-TIMESTAMP_FORMAT = "%m/%d/%Y %I:%M:%S %p"
+# Pretty format: "%m/%d/%Y %I:%M:%S %p"
+# MariaDB datetime format: "%Y-%m-%d %H:%M:%S.%f"
+TIMESTAMP_FORMAT = "%Y-%m-%d %H:%M:%S.%f"
 
 
 # ================================== Classes ==================================
@@ -317,10 +319,16 @@ def determine_primary_opsgenie_tag(opsgenie_tags: list[str]) -> str:
     # is extremely inefficient, but due to the state of our Opsgenie
     # tagging, this is the only way this can currently be done.
     for tag in opsgenie_tags_lowercase:
-        if "vcenters" in tag:
+        if "hotline" in tag:
+            primary_tag = "Hotline"
+            break
+        elif "vcenters" in tag:
             primary_tag = "vCenter"
             break
         elif "aps" in tag:
+            primary_tag = "Access Point"
+            break
+        elif "-ap" in tag:
             primary_tag = "Access Point"
             break
         elif "hosts" in tag:
@@ -350,14 +358,26 @@ def determine_primary_opsgenie_tag(opsgenie_tags: list[str]) -> str:
         elif "storage" in tag:
             primary_tag = "Storage"
             break
+        elif "-fabric" in tag:
+            primary_tag = "Storage"
+            break
         elif "bkup" in tag:
             primary_tag = "Backup"
             break
         elif "network" in tag:
             primary_tag = "Network"
             break
+        elif "-sw" in tag:
+            primary_tag = "Network"
+            break
+        elif "fw" in tag:
+            primary_tag = "Network"
+            break
         elif "server" in tag:
             primary_tag = "Server"
+            break
+        elif "hardware" in tag:
+            primary_tag = "Hardware"
             break
     
     # If all else fails, the primary tag is miscellaneous.
@@ -460,17 +480,18 @@ def opsgenie_alert_to_row(alert_data: OpsgenieBaseAlert, smartsheet_sheet: smart
     return alert_row
 
 
-def get_quarterly_opsgenie_alerts(opsgenie_alert_tag: str) -> list[OpsgenieBaseAlert]:
+def get_quarterly_opsgenie_alerts(opsgenie_alert_tags: list[str]) -> list[OpsgenieBaseAlert]:
     """
-    Given a valid Opsgenie tag, return all alerts within the past 90 days with
-    provided tag.
+    Given a valid list of Opsgenie tags, return all alerts within the past 90
+    days with the provided tags.
 
     Args:
-        opsgenie_alert_tag (str): The tag associated with the desired alerts.
+        opsgenie_alert_tags (list[str]): The tags associated with the desired
+            alerts.
 
     Returns:
         list[OpsgenieBaseAlert]: A list of quarterly alerts with the associated
-            alert tag.
+            alert tags.
     """
 
     logger.info('Gathering quarterly Opsgenie alert data...')
@@ -482,7 +503,7 @@ def get_quarterly_opsgenie_alerts(opsgenie_alert_tag: str) -> list[OpsgenieBaseA
     date_90_days_ago = datetime.today() - timedelta(days=90)
     quarterly_alerts_query = \
         f'createdAt >= {date_90_days_ago.strftime("%d-%m-%Y")} ' \
-        f'tag: "{opsgenie_alert_tag}"'
+        f'tag: ("{"\" OR \"".join(opsgenie_alert_tags)}")'
 
     # Paginate over the quarterly Opsgenie alerts.
     quarterly_alerts = list[OpsgenieBaseAlert]()
@@ -535,7 +556,7 @@ def put_opsgenie_data_into_smartsheet(customer_config: dict) -> None:
     """
 
     # Get the quarterly Opsgenie data for this customer.
-    quarterly_opsgenie_alerts = get_quarterly_opsgenie_alerts(customer_config['opsgenie_tag'])
+    quarterly_opsgenie_alerts = get_quarterly_opsgenie_alerts(customer_config['opsgenie_tags'])
 
     # Get a reference to this customer's Opsgenie alerts Smartsheet.
     opsgenie_smartsheet = SMARTSHEET_CLIENT.Sheets.get_sheet(customer_config['smartsheet_opsgenie_alerts_sheet_id'])
@@ -979,7 +1000,7 @@ def run():
 
     # Push all customer alert and ticket data into their respective Smartsheets.
     for customer_config in CUSTOMER_CONFIGS:
-        logger.info(f'Beginning QBR automation for "{customer_config['opsgenie_tag']}"...')
+        logger.info(f'Beginning QBR automation for "{customer_config['customer_name']}"...')
 
         # Push this customer's Opsgenie alert data into a Smartsheet.
         put_opsgenie_data_into_smartsheet(customer_config)
@@ -990,7 +1011,7 @@ def run():
         # Push this customer's current PRTG sensor alerts into a Smartsheet.
         put_prtg_sensor_data_into_smartsheet(customer_config)
 
-        logger.info(f'Completed QBR automation for "{customer_config['opsgenie_tag']}"!')
+        logger.info(f'Completed QBR automation for "{customer_config['customer_name']}"!')
     
     logger.info('QBR automation completed successfully!')
 
