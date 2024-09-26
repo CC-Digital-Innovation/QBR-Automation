@@ -1,6 +1,7 @@
-repo: https://github.com/CC-Digital-Innovation/QBR-Automation.git
+repo: https://github.com/CC-Digital-Innovation/QBR-Automation
 ssh_url: git@github.com:CC-Digital-Innovation/QBR-Automation.git
 branch: main
+project_root: src
 image: quarterly-business-report-automation
 manifest_path: quarterly_business_report_automation-cronjob.yml
 pipeline: quarterly-business-report-automation
