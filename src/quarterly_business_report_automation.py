@@ -18,7 +18,10 @@ load_dotenv(override=True)
 
 # Initialize customer constant global variables.
 CUSTOMER_CONFIG_JSON = os.getenv('CUSTOMER_CONFIGS')
-CUSTOMER_CONFIGS = json.loads(CUSTOMER_CONFIG_JSON)
+if type(CUSTOMER_CONFIG_JSON) is str:
+    CUSTOMER_CONFIGS = json.loads(CUSTOMER_CONFIG_JSON)
+else:
+    CUSTOMER_CONFIGS = CUSTOMER_CONFIG_JSON
 
 # Initialize Opsgenie constant global variables.
 OPSGENIE_API_KEY = os.getenv('OPSGENIE_API_KEY')
