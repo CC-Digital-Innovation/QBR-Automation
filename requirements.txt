@@ -2,6 +2,6 @@ loguru
 opsgenie_sdk
 pysnow
 python-dotenv
-python-magic-bin
+python-magic
 requests
 smartsheet-python-sdk
