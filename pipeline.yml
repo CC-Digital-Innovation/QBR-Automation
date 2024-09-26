@@ -22,8 +22,7 @@ resources:
       password: ((git.password))
       # determines what files trigger the pipeline, replace with "ignore_paths" if more files need to trigger
       paths:
-        - src  # replace with source file(s) if no project root directory
-        - configs
+        - ((project_root))  # remove if no project root directory
         - Dockerfile
         - requirements.txt
   # resource for writing to repository; write-only to avoid retriggering pipeline
@@ -38,11 +37,10 @@ resources:
   # resource of where to push image
   - name: registry
     type: registry-image
-    icon: gitlab
     source:
-      repository: ((gitlab.repository))/((image))
-      username: ((gitlab.username))
-      password: ((gitlab.password))
+      repository: ((harbor.repository))/((image))
+      username: ((harbor.username))
+      password: ((harbor.password))
   # resource for versioning
   - name: version
     type: semver
@@ -63,7 +61,7 @@ resources:
 # add slack resource
 resource_types:
   - name: slack-alert
-    type: docker-image
+    type: registry-image
     source:
       repository: arbourd/concourse-slack-alert-resource
 
@@ -147,7 +145,7 @@ jobs:
               - -exc
               - |
                 cd bump-repo
-                yq -i '.spec.jobTemplate.spec.template.spec.containers[0].image = "((gitlab.repository))/((image)):((.:version_num))"' ((manifest_path))
+                yq -i '.spec.template.spec.containers[0].image = "((harbor.repository))/((image)):((.:version_num))"' ((manifest_path))
             user: root
       - task: git-commit-bump
         config:
