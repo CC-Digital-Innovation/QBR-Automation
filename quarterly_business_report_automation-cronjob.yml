@@ -11,9 +11,9 @@ spec:
           annotations:
             vault.hashicorp.com/agent-inject: 'true'
             vault.hashicorp.com/role: 'quarterly_business_report_automation'
-            vault.hashicorp.com/agent-inject-secret-opsgenie-quarterly_business_report_automation: 'secret/opsgenie/quarterly_business_report_automation'
-            vault.hashicorp.com/agent-inject-template-opsgenie-quarterly_business_report_automation: |
-              {{- with secret "secret/opsgenie/quarterly_business_report_automation" -}}
+            vault.hashicorp.com/agent-inject-secret-opsgenie-qbr_auto: 'secret/opsgenie/qbr_auto'
+            vault.hashicorp.com/agent-inject-template-opsgenie-qbr_auto: |
+              {{- with secret "secret/opsgenie/qbr_auto" -}}
                 export OPSGENIE_API_KEY="{{ .Data.data.api_key }}"
               {{- end }}
             vault.hashicorp.com/agent-inject-secret-prtg: 'secret/prtg'
@@ -21,9 +21,9 @@ spec:
               {{- with secret "secret/prtg" -}}
                 export PRTG_DEFAULT_INSTANCE_URL="{{ .Data.data.instance_url }}"
               {{- end }}
-            vault.hashicorp.com/agent-inject-secret-prtg-quarterly_business_report_automation: 'secret/prtg/quarterly_business_report_automation'
-            vault.hashicorp.com/agent-inject-template-prtg-quarterly_business_report_automation: |
-              {{- with secret "secret/prtg/quarterly_business_report_automation" -}}
+            vault.hashicorp.com/agent-inject-secret-prtg-qbr_auto: 'secret/prtg/qbr_auto'
+            vault.hashicorp.com/agent-inject-template-prtg-qbr_auto: |
+              {{- with secret "secret/prtg/qbr_auto" -}}
                 export PRTG_DEFAULT_API_KEY="{{ .Data.data.api_key }}"
               {{- end }}
             vault.hashicorp.com/agent-inject-secret-servicenow: 'secret/servicenow'
@@ -33,14 +33,14 @@ spec:
                 export SERVICENOW_USERNAME="{{ .Data.data.anthony_username }}"
                 export SERVICENOW_PASSWORD="{{ .Data.data.anthony_password }}"
               {{- end }}
-            vault.hashicorp.com/agent-inject-secret-smartsheet-quarterly_business_report_automation: 'secret/smartsheet/quarterly_business_report_automation'
-            vault.hashicorp.com/agent-inject-template-smartsheet-quarterly_business_report_automation: |
-              {{- with secret "secret/smartsheet/quarterly_business_report_automation" -}}
+            vault.hashicorp.com/agent-inject-secret-smartsheet-qbr_auto: 'secret/smartsheet/qbr_auto'
+            vault.hashicorp.com/agent-inject-template-smartsheet-qbr_auto: |
+              {{- with secret "secret/smartsheet/qbr_auto" -}}
                 export SMARTSHEET_API_KEY="{{ .Data.data.api_key }}"
               {{- end }}
-            vault.hashicorp.com/agent-inject-secret-quarterly_business_report_automation: 'secret/quarterly_business_report_automation'
-            vault.hashicorp.com/agent-inject-template-quarterly_business_report_automation: |
-              {{- with secret "secret/quarterly_business_report_automation" -}}
+            vault.hashicorp.com/agent-inject-secret-qbr_auto: 'secret/qbr_auto'
+            vault.hashicorp.com/agent-inject-template-qbr_auto: |
+              {{- with secret "secret/qbr_auto" -}}
                 export CUSTOMER_CONFIGS="{{ .Data.data.customer_configs }}"
               {{- end }}
             vault.hashicorp.com/ca-cert: /run/secrets/kubernetes.io/serviceaccount/ca.crt
@@ -48,7 +48,7 @@ spec:
           containers:
             - image: registry.quokka.ninja/ccfs/quarterly-business-report-automation:0.0.1
               name: quarterly-business-report-automation
-              args: ['/bin/bash', '-c', 'source /vault/secrets/opsgenie-quarterly_business_report_automation && source /vault/secrets/prtg && source /vault/secrets/prtg-quarterly_business_report_automation && source /vault/secrets/servicenow && source /vault/secrets/smartsheet-quarterly_business_report_automation && source /vault/secrets/quarterly_business_report_automation && python ./src/quarterly_business_report_automation.py']
+              args: ['/bin/bash', '-c', 'source /vault/secrets/opsgenie-qbr_auto && source /vault/secrets/prtg && source /vault/secrets/prtg-qbr_auto && source /vault/secrets/servicenow && source /vault/secrets/smartsheet-qbr_auto && source /vault/secrets/qbr_auto && python ./src/quarterly_business_report_automation.py']
           restartPolicy: Never
           serviceAccountName: quarterly-business-report-automation
       backoffLimit: 3
