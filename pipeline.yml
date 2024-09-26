@@ -145,7 +145,7 @@ jobs:
               - -exc
               - |
                 cd bump-repo
-                yq -i '.spec.template.spec.containers[0].image = "((harbor.repository))/((image)):((.:version_num))"' ((manifest_path))
+                yq -i '.spec.jobTemplate.spec.template.spec.containers[0].image = "((harbor.repository))/((image)):((.:version_num))"' ((manifest_path))
             user: root
       - task: git-commit-bump
         config:
