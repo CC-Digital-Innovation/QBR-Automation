@@ -38,16 +38,16 @@ spec:
               {{- with secret "secret/smartsheet/qbr_auto" -}}
                 export SMARTSHEET_API_KEY="{{ .Data.data.api_key }}"
               {{- end }}
-            # vault.hashicorp.com/agent-inject-secret-qbr_auto: 'secret/qbr_auto'
-            # vault.hashicorp.com/agent-inject-template-qbr_auto: |
-            #   {{- with secret "secret/qbr_auto" -}}
-            #     export CUSTOMER_CONFIGS="{{ .Data.data.customer_configs }}"
-            #   {{- end }}
-            vault.hashicorp.com/agent-inject-secret-customer_configs.json: 'secret/data/qbr_auto'
+            vault.hashicorp.com/agent-inject-secret-qbr_auto: 'secret/qbr_auto'
             vault.hashicorp.com/agent-inject-template-qbr_auto: |
-              {{- with secret "secret/data/qbr_auto" -}}
-              {{ .Data | toUnescapedJSON }}
+              {{- with secret "secret/qbr_auto" -}}
+                export CUSTOMER_CONFIGS="{{ .Data.data.customer_configs | toUnescapedJSON }}"
               {{- end }}
+            # vault.hashicorp.com/agent-inject-secret-customer_configs.json: 'secret/data/qbr_auto'
+            # vault.hashicorp.com/agent-inject-template-qbr_auto: |
+            #   {{- with secret "secret/data/qbr_auto" -}}
+            #   {{ .Data | toUnescapedJSON }}
+            #   {{- end }}
             # vault.hashicorp.com/agent-inject-file-customer_configs.json: 'secret/qbr_auto/customer_configs.json'
             vault.hashicorp.com/ca-cert: /run/secrets/kubernetes.io/serviceaccount/ca.crt
         spec:
