@@ -17,11 +17,12 @@ import smartsheet.sheets
 load_dotenv(override=True)
 
 # Initialize customer constant global variables.
-CUSTOMER_CONFIG_JSON = os.getenv('CUSTOMER_CONFIGS')
-if type(CUSTOMER_CONFIG_JSON) is str:
-    CUSTOMER_CONFIGS = json.loads(CUSTOMER_CONFIG_JSON)
-else:
-    CUSTOMER_CONFIGS = CUSTOMER_CONFIG_JSON
+# CUSTOMER_CONFIG_JSON = os.getenv('CUSTOMER_CONFIGS')
+# if type(CUSTOMER_CONFIG_JSON) is str:
+#     CUSTOMER_CONFIGS = json.loads(CUSTOMER_CONFIG_JSON)
+# else:
+#     CUSTOMER_CONFIGS = CUSTOMER_CONFIG_JSON
+CUSTOMER_CONFIGS = json.load('/vault/secrets/customer_configs.json')
 
 # Initialize Opsgenie constant global variables.
 OPSGENIE_API_KEY = os.getenv('OPSGENIE_API_KEY')
