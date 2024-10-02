@@ -43,14 +43,14 @@ spec:
             vault.hashicorp.com/secret-volume-path-qbr_auto: '/app'
             vault.hashicorp.com/agent-inject-template-qbr_auto: |
               {{- with secret "secret/qbr_auto" -}}
-                {{ .Data | toUnescapedJSON }}
+              {{ .Data | toUnescapedJSON }}
               {{- end }}
             vault.hashicorp.com/ca-cert: /run/secrets/kubernetes.io/serviceaccount/ca.crt
         spec:
           containers:
             - image: harbor.k3s.quokka.ninja/library/quarterly-business-report-automation:0.0.10
               name: quarterly-business-report-automation
-              args: ['/bin/bash', '-c', 'source /vault/secrets/opsgenie-qbr_auto && source /vault/secrets/prtg && source /vault/secrets/prtg-qbr_auto && source /vault/secrets/servicenow && source /vault/secrets/smartsheet-qbr_auto && source /app/files/customer_configs.json && python ./src/quarterly_business_report_automation.py']
+              args: ['/bin/bash', '-c', 'source /vault/secrets/opsgenie-qbr_auto && source /vault/secrets/prtg && source /vault/secrets/prtg-qbr_auto && source /vault/secrets/servicenow && source /vault/secrets/smartsheet-qbr_auto && python ./src/quarterly_business_report_automation.py']
           restartPolicy: Never
           serviceAccountName: quarterly-business-report-automation
       backoffLimit: 3
