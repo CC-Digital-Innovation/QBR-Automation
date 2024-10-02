@@ -41,6 +41,10 @@ spec:
             vault.hashicorp.com/agent-inject-secret-qbr_auto: 'secret/qbr_auto'
             vault.hashicorp.com/agent-inject-file-qbr_auto: '/files/customer_configs.json'
             vault.hashicorp.com/secret-volume-path-qbr_auto: '/app'
+            vault.hashicorp.com/agent-inject-template-qbr_auto: |
+              {{- with secret "secret/qbr_auto" -}}
+              "{{ .Data.data.customer_configs }}"
+              {{- end }}
             vault.hashicorp.com/ca-cert: /run/secrets/kubernetes.io/serviceaccount/ca.crt
         spec:
           containers:
