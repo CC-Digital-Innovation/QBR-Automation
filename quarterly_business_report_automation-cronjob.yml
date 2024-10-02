@@ -38,23 +38,15 @@ spec:
               {{- with secret "secret/smartsheet/qbr_auto" -}}
                 export SMARTSHEET_API_KEY="{{ .Data.data.api_key }}"
               {{- end }}
-            vault.hashicorp.com/agent-inject-secret-customer_configs.json: 'secret/qbr_auto'
-            vault.hashicorp.com/agent-inject-template-customer_configs.json: |
-              {{- with secret "secret/qbr_auto" -}}
-              {{ .Data.data.customer_configs }}
-              {{- end }}
-            # vault.hashicorp.com/agent-inject-secret-customer_configs.json: 'secret/data/qbr_auto'
-            # vault.hashicorp.com/agent-inject-template-qbr_auto: |
-            #   {{- with secret "secret/data/qbr_auto" -}}
-            #   {{ .Data | toUnescapedJSON }}
-            #   {{- end }}
-            # vault.hashicorp.com/agent-inject-file-customer_configs.json: 'secret/qbr_auto/customer_configs.json'
+            vault.hashicorp.com/agent-inject-secret-qbr_auto: 'secret/qbr_auto'
+            vault.hashicorp.com/agent-inject-file-qbr_auto: '/files/customer_configs.json'
+            vault.hashicorp.com/secret-volume-path-qbr_auto: '/app'
             vault.hashicorp.com/ca-cert: /run/secrets/kubernetes.io/serviceaccount/ca.crt
         spec:
           containers:
             - image: harbor.k3s.quokka.ninja/library/quarterly-business-report-automation:0.0.8
               name: quarterly-business-report-automation
-              args: ['/bin/bash', '-c', 'source /vault/secrets/opsgenie-qbr_auto && source /vault/secrets/prtg && source /vault/secrets/prtg-qbr_auto && source /vault/secrets/servicenow && source /vault/secrets/smartsheet-qbr_auto && source /vault/secrets/customer_configs.json && python ./src/quarterly_business_report_automation.py']
+              args: ['/bin/bash', '-c', 'source /vault/secrets/opsgenie-qbr_auto && source /vault/secrets/prtg && source /vault/secrets/prtg-qbr_auto && source /vault/secrets/servicenow && source /vault/secrets/smartsheet-qbr_auto && source /vault/secrets/qbr_auto && source /app/files/customer_configs.json && python ./src/quarterly_business_report_automation.py']
           restartPolicy: Never
           serviceAccountName: quarterly-business-report-automation
       backoffLimit: 3
