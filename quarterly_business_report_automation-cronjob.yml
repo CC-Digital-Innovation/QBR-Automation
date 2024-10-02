@@ -48,7 +48,7 @@ spec:
             vault.hashicorp.com/ca-cert: /run/secrets/kubernetes.io/serviceaccount/ca.crt
         spec:
           containers:
-            - image: harbor.k3s.quokka.ninja/library/quarterly-business-report-automation:0.0.12
+            - image: harbor.k3s.quokka.ninja/library/quarterly-business-report-automation:0.0.13
               name: quarterly-business-report-automation
               args: ['/bin/bash', '-c', 'source /vault/secrets/opsgenie-qbr_auto && source /vault/secrets/prtg && source /vault/secrets/prtg-qbr_auto && source /vault/secrets/servicenow && source /vault/secrets/smartsheet-qbr_auto && python ./src/quarterly_business_report_automation.py']
           restartPolicy: Never
