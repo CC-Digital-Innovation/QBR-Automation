@@ -41,7 +41,7 @@ spec:
             vault.hashicorp.com/agent-inject-secret-customer_configs.json: 'secret/qbr_auto'
             vault.hashicorp.com/agent-inject-template-customer_configs.json: |
               {{- with secret "secret/qbr_auto" -}}
-              {{ .Data.customer_configs }}
+              {{ .Data.data.customer_configs }}
               {{- end }}
             # vault.hashicorp.com/agent-inject-secret-customer_configs.json: 'secret/data/qbr_auto'
             # vault.hashicorp.com/agent-inject-template-qbr_auto: |
