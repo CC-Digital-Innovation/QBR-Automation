@@ -24,8 +24,12 @@ load_dotenv(override=True)
 #     CUSTOMER_CONFIGS = json.loads(CUSTOMER_CONFIG_JSON)
 # else:
 #     CUSTOMER_CONFIGS = CUSTOMER_CONFIG_JSON
-with open('/files/customer_configs.json', 'r') as file:
+with open('app/files/customer_configs.json', 'r') as file:
     CUSTOMER_CONFIGS = json.load(file)
+
+print(CUSTOMER_CONFIGS)
+print("Success!")
+exit()
 
 # Initialize Opsgenie constant global variables.
 OPSGENIE_API_KEY = os.getenv('OPSGENIE_API_KEY')
