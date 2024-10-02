@@ -38,10 +38,10 @@ spec:
               {{- with secret "secret/smartsheet/qbr_auto" -}}
                 export SMARTSHEET_API_KEY="{{ .Data.data.api_key }}"
               {{- end }}
-            vault.hashicorp.com/agent-inject-secret-qbr_auto: 'secret/qbr_auto'
-            vault.hashicorp.com/agent-inject-template-qbr_auto: |
+            vault.hashicorp.com/agent-inject-secret-customer_configs.json: 'secret/qbr_auto'
+            vault.hashicorp.com/agent-inject-template-customer_configs.json: |
               {{- with secret "secret/qbr_auto" -}}
-                export CUSTOMER_CONFIGS="{{ .Data.data.customer_configs }}"
+              {{ .Data.customer_configs }}
               {{- end }}
             # vault.hashicorp.com/agent-inject-secret-customer_configs.json: 'secret/data/qbr_auto'
             # vault.hashicorp.com/agent-inject-template-qbr_auto: |
