@@ -40,7 +40,6 @@ spec:
               {{- end }}
             vault.hashicorp.com/agent-inject-secret-qbr_auto: 'secret/qbr_auto'
             vault.hashicorp.com/agent-inject-default-template: json
-            # vault.hashicorp.com/agent-inject-file-qbr_auto: '/etc/files/customer_configs.json'
             vault.hashicorp.com/agent-pre-populate-only: 'true'
             vault.hashicorp.com/ca-cert: /run/secrets/kubernetes.io/serviceaccount/ca.crt
         spec:

@@ -17,21 +17,9 @@ import smartsheet.sheets
 load_dotenv(override=True)
 
 # Initialize customer constant global variables.
-# CUSTOMER_CONFIG_JSON = os.getenv('CUSTOMER_CONFIGS')
-# CUSTOMER_CONFIGS = json.loads(CUSTOMER_CONFIG_JSON)
-# print(CUSTOMER_CONFIG_JSON)
-# print(type(CUSTOMER_CONFIG_JSON))
-# if type(CUSTOMER_CONFIG_JSON) is str:
-#     CUSTOMER_CONFIGS = json.loads(CUSTOMER_CONFIG_JSON)
-# else:
-#     CUSTOMER_CONFIGS = CUSTOMER_CONFIG_JSON
-
 with open('/vault/secrets/qbr_auto', 'r') as file:
-    CUSTOMER_CONFIGS = json.load(file)
-
-print(CUSTOMER_CONFIGS)
-print("Success!")
-exit()
+    CUSTOMER_CONFIGS_JSON = json.load(file)
+CUSTOMER_CONFIGS = CUSTOMER_CONFIGS_JSON['data']['customer_configs']
 
 # Initialize Opsgenie constant global variables.
 OPSGENIE_API_KEY = os.getenv('OPSGENIE_API_KEY')
