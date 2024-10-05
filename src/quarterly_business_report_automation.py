@@ -19,7 +19,7 @@ load_dotenv(override=True)
 # Initialize customer constant global variables.
 with open('/vault/secrets/qbr_auto', 'r') as file:
     CUSTOMER_CONFIGS_JSON = json.load(file)
-CUSTOMER_CONFIGS = CUSTOMER_CONFIGS_JSON['data']['customer_configs']
+CUSTOMER_CONFIGS = json.loads(CUSTOMER_CONFIGS_JSON['data']['customer_configs'])
 
 # Initialize Opsgenie constant global variables.
 OPSGENIE_API_KEY = os.getenv('OPSGENIE_API_KEY')
