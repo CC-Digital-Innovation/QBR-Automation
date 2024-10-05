@@ -47,7 +47,7 @@ spec:
             vault.hashicorp.com/ca-cert: /run/secrets/kubernetes.io/serviceaccount/ca.crt
         spec:
           containers:
-            - image: harbor.k3s.quokka.ninja/library/quarterly-business-report-automation:0.0.18
+            - image: harbor.k3s.quokka.ninja/library/quarterly-business-report-automation:0.0.19
               name: quarterly-business-report-automation
               volumeMounts:
                 - name: file_volume
