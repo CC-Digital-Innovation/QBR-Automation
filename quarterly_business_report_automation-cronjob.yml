@@ -38,9 +38,9 @@ spec:
               {{- with secret "secret/smartsheet/qbr_auto" -}}
                 export SMARTSHEET_API_KEY="{{ .Data.data.api_key }}"
               {{- end }}
-            vault.hashicorp.com/agent-inject-secret-qbr_auto: 'secret/qbr_auto'
+            vault.hashicorp.com/agent-inject-secret-qbr_auto: 'secrets/qbr_auto'
             vault.hashicorp.com/agent-inject-template-qbr_auto: |
-              {{- with secret "secret/qbr_auto" -}}
+              {{- with secret "secrets/qbr_auto" -}}
               {{ .Data.data | toUnescapedJSON }}
               {{- end }}
             vault.hashicorp.com/agent-inject-file-qbr_auto: '/etc/files/customer_configs.json'
@@ -52,7 +52,7 @@ spec:
               volumeMounts:
                 - name: file-volume
                   mountPath: /etc/files
-              args: ['/bin/bash', '-c', 'source /vault/secrets/opsgenie-qbr_auto && source /vault/secrets/prtg && source /vault/secrets/prtg-qbr_auto && source /vault/secrets/servicenow && source /vault/secrets/smartsheet-qbr_auto && python ./src/quarterly_business_report_automation.py']
+              args: ['/bin/bash', '-c', 'source /vault/secrets/opsgenie-qbr_auto && source /vault/secrets/prtg && source /vault/secrets/prtg-qbr_auto && source /vault/secrets/servicenow && source /vault/secrets/smartsheet-qbr_auto && cat /vault/secrets/qbr_auto > /etc/files/customer_configs.json && python ./src/quarterly_business_report_automation.py']
           volumes:
             - name: file-volume
               emptyDir: {}
