@@ -26,7 +26,7 @@ load_dotenv(override=True)
 # else:
 #     CUSTOMER_CONFIGS = CUSTOMER_CONFIG_JSON
 
-with open('/etc/files/customer_configs.json', 'r') as file:
+with open('/vault/secrets/qbr_auto', 'r') as file:
     CUSTOMER_CONFIGS = json.load(file)
 
 print(CUSTOMER_CONFIGS)
