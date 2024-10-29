@@ -47,6 +47,12 @@ encounter any problems, please log an
 5. Submit a pull request ツ
 
 ## History
+-  version 1.2.0 - 2024/10/29
+    - Capped data rows to 2,500 for Smartsheet so we can use dashboards
+    - Added support for customers in ServiceNow that have multiple names
+    - Added support for customers that don't use PRTG
+
+
 -  version 1.0.1 - 2024/09/26
     - Put MVP into pipeline
     - More robust Opsgenie tagging recognition

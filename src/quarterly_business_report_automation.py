@@ -11,6 +11,10 @@ import pysnow
 import requests
 import smartsheet
 import smartsheet.sheets
+from smartsheet.models.sheet import Sheet as SmartsheetSheet
+from smartsheet.models.row import Row as SmartsheetRow
+from smartsheet.models.cell import Cell as SmartsheetCell
+from smartsheet import Smartsheet as SmartsheetClient
 
 
 # ====================== Environment / Global Variables =======================
@@ -48,7 +52,8 @@ SERVICENOW_DATETIME_FORMAT = "%Y-%m-%d %I:%M:%S %p"
 
 # Initialize Smartsheet constant global variables.
 SMARTSHEET_API_KEY = os.getenv('SMARTSHEET_API_KEY')
-SMARTSHEET_CLIENT = smartsheet.Smartsheet(access_token=SMARTSHEET_API_KEY)
+SMARTSHEET_CLIENT = SmartsheetClient(access_token=SMARTSHEET_API_KEY)
+SMARTSHEET_MAX_DASHBOARD_ROW_COUNT = 2500
 SMARTSHEET_MAX_ROW_DELETION = 100
 
 # Initialize other constant global variables.
@@ -81,7 +86,8 @@ class OpsgenieClient:
         """
         Generator function that will paginate over a list of Opsgenie alerts 
         based off the provided query. Returns a list of Opsgenie BaseAlert
-        objects.
+        objects. This generator will stop providing results as soon as it 
+        outputs SMARTSHEET_MAX_DASHBOARD_ROW_COUNT amount of alerts.
 
         Args:
             query (str): The query string to send to Opsgenie. More information
@@ -101,7 +107,7 @@ class OpsgenieClient:
         # Get the first page of the response.
         try:
             list_alerts_response = self.alert_api.list_alerts(
-                limit=OPSGENIE_MAX_RESPONSE_LIMIT,
+                limit=OPSGENIE_MAX_RESPONSE_LIMIT if OPSGENIE_MAX_RESPONSE_LIMIT <= SMARTSHEET_MAX_DASHBOARD_ROW_COUNT else SMARTSHEET_MAX_DASHBOARD_ROW_COUNT,
                 order='desc',
                 query=query
             )
@@ -110,7 +116,7 @@ class OpsgenieClient:
                          "AlertApi->list_alerts endpoint: %s\n" % og_api_exception)
 
         # Check if there is not a next page.
-        if list_alerts_response.paging.next is None:
+        if list_alerts_response.paging.next is None or len(list_alerts_response.data) == SMARTSHEET_MAX_DASHBOARD_ROW_COUNT:
             # Return the first (and only) page of alert data.
             return list_alerts_response.data
         
@@ -118,14 +124,14 @@ class OpsgenieClient:
         yield list_alerts_response.data
 
         # While there are more pages, keep paginating the alerts response.
-        while list_alerts_response.paging.next is not None:
-            # Get the offset for the next page.
-            current_offset += OPSGENIE_MAX_RESPONSE_LIMIT
-
+        current_offset += OPSGENIE_MAX_RESPONSE_LIMIT
+        while list_alerts_response.paging.next is not None and current_offset < SMARTSHEET_MAX_DASHBOARD_ROW_COUNT:
             # Get the next page of the alerts response.
             try:
                 list_alerts_response = self.alert_api.list_alerts(
-                    limit=OPSGENIE_MAX_RESPONSE_LIMIT,
+                    limit=OPSGENIE_MAX_RESPONSE_LIMIT
+                        if (current_offset + OPSGENIE_MAX_RESPONSE_LIMIT) <= SMARTSHEET_MAX_DASHBOARD_ROW_COUNT
+                        else (SMARTSHEET_MAX_DASHBOARD_ROW_COUNT - current_offset),
                     offset=current_offset,
                     order='desc',
                     query=query
@@ -136,6 +142,9 @@ class OpsgenieClient:
             
             # Return the next page of the alerts response.
             yield list_alerts_response.data
+            
+            # Get the offset for the next page.
+            current_offset += OPSGENIE_MAX_RESPONSE_LIMIT
 
 
 class ServiceNowTicket:
@@ -182,6 +191,14 @@ class ServiceNowTicket:
         self.opened_at = datetime.strptime(opened_at, SERVICENOW_DATETIME_FORMAT)
         self.updated_by = updated_by
         self.closed_at = None if closed_at == '' else datetime.strptime(closed_at, SERVICENOW_DATETIME_FORMAT)
+        
+        # Determine resolve time by hand.
+        if self.closed_at is None:
+            self.resolve_time = ''
+        else:
+            resolve_time = self.closed_at - self.opened_at
+            
+            self.resolve_time = resolve_time.total_seconds() / 60 / 60 / 24
 
 
 class PRTGSensor:
@@ -216,12 +233,12 @@ class PRTGSensor:
 
 
 # ================================= Functions =================================
-def clear_smartsheet(smartsheet_sheet: smartsheet.Smartsheet.models.sheet.Sheet) -> None:
+def clear_smartsheet(smartsheet_sheet: SmartsheetSheet) -> None:
     """
     Clears all rows in the provided Smartsheet.
 
     Args:
-        smartsheet_sheet (smartsheet.Smartsheet.models.sheet.Sheet): The Smartsheet 
+        smartsheet_sheet (SmartsheetSheet): The Smartsheet 
             to clear all the rows for.
     """
 
@@ -261,15 +278,61 @@ def clear_smartsheet(smartsheet_sheet: smartsheet.Smartsheet.models.sheet.Sheet)
                 f'cleared successfully!')
     
 
-def add_rows_to_smartsheet(smartsheet_sheet: smartsheet.Smartsheet.models.sheet.Sheet, 
-                           rows: list[smartsheet.Smartsheet.models.row.Row]) -> None:
+def delete_smartsheet_rows(smartsheet_sheet: SmartsheetSheet, smartsheet_rows: list[SmartsheetRow]) -> None:
+    """
+    Deletes the provided rows from the provided Smartsheet. The list of rows 
+    must be rows that exist inside the Smartsheet.
+
+    Args:
+        smartsheet_sheet (SmartsheetSheet): The Smartsheet to delete the rows
+            in.
+        smartsheet_rows (list[SmartsheetRow]): The rows to delete from the
+            Smartsheet.
+    """
+
+    logger.info(f'Deleting {len(smartsheet_rows)} rows from Smartsheet "{smartsheet_sheet.name}"...')
+
+    # Extract the row IDs from the provided list of rows in the Smartsheet.
+    all_row_ids = []
+    for row in smartsheet_rows:
+        # Add this row's ID to the row ID list.
+        all_row_ids.append(row.id)
+    
+    # Check if the Smartsheet is already empty.
+    if len(all_row_ids) == 0:
+        logger.info('Smartsheet already empty!')
+        return
+
+    # Delete the rows in chunks.
+    for chunk_offset in range(0, len(all_row_ids), SMARTSHEET_MAX_ROW_DELETION):
+        # Get the row ID chunk.
+        row_id_chunk = all_row_ids[chunk_offset:chunk_offset + SMARTSHEET_MAX_ROW_DELETION]
+
+        # Delete this chunk of rows in the Smartsheet.
+        delete_row_chunk_response = SMARTSHEET_CLIENT.Sheets.delete_rows(
+            smartsheet_sheet.id,
+            row_id_chunk
+        )
+
+        # Check if the deletion failed.
+        if delete_row_chunk_response.message != 'SUCCESS':
+            logger.error(f'An error occurred while trying to delete a chunk of '
+                         f'rows from the "{smartsheet_sheet.name}" Smartsheet')
+            logger.error(f'Result Code: {delete_row_chunk_response.result.code}')
+            continue
+
+    logger.info(f'{len(smartsheet_rows)} rows in the "{smartsheet_sheet.name}" Smartsheet were '
+                f'deleted successfully!')
+
+
+def add_rows_to_smartsheet(smartsheet_sheet: SmartsheetSheet, rows: list[SmartsheetRow]) -> None:
     """
     Adds the provided list of rows to the provided Smartsheet.
 
     Args:
-        smartsheet_sheet (smartsheet.Smartsheet.models.sheet.Sheet): The Smartsheet
+        smartsheet_sheet (SmartsheetSheet): The Smartsheet
             to add the rows to.
-        rows (list[smartsheet.Smartsheet.models.row.Row]): The rows to add to
+        rows (list[SmartsheetRow]): The rows to add to
             the Smartsheet.
     """
 
@@ -390,78 +453,78 @@ def determine_primary_opsgenie_tag(opsgenie_tags: list[str]) -> str:
     return primary_tag
 
 
-def opsgenie_alert_to_row(alert_data: OpsgenieBaseAlert, smartsheet_sheet: smartsheet.Smartsheet.models.sheet.Sheet) -> smartsheet.Smartsheet.models.row.Row:
+def opsgenie_alert_to_row(alert_data: OpsgenieBaseAlert, smartsheet_sheet: SmartsheetSheet) -> SmartsheetRow:
     """
     Given an Opsgenie BaseAlert object and a valid Smartsheet object, convert
     the base alert's data into a Smartsheet row object.
 
     Args:
         alert_data (OpsgenieBaseAlert): The alert data we want to convert.
-        sheet (smartsheet.Smartsheet.models.sheet.Sheet): The Smartsheet to create the Row
+        sheet (SmartsheetSheet): The Smartsheet to create the Row
             for.
 
     Returns:
-        smartsheet.Smartsheet.model.row.Row: The Smartsheet row object containing the 
+        SmartsheetRow: The Smartsheet row object containing the 
             alert's data.
     """
 
     # Initialize the row object we will be returning.
-    alert_row = smartsheet.models.Row()
+    alert_row = SmartsheetRow()
     alert_row.to_top = True
 
     # Initialize the cell with the alert's alias.
-    alias_cell = smartsheet.models.Cell()
+    alias_cell = SmartsheetCell()
     alias_cell.column_id = smartsheet_sheet.columns[0].id
     alias_cell.value = alert_data.alias
 
     # Initialize the cell with the alert's type.
-    type_cell = smartsheet.models.Cell()
+    type_cell = SmartsheetCell()
     type_cell.column_id = smartsheet_sheet.columns[1].id
     type_cell.value = determine_primary_opsgenie_tag(alert_data.tags)
 
     # Initialize the cell with the alert's message.
-    message_cell = smartsheet.models.Cell()
+    message_cell = SmartsheetCell()
     message_cell.column_id = smartsheet_sheet.columns[2].id
     message_cell.value = alert_data.message
 
     # Initialize the cell with the alert's ID.
-    id_cell = smartsheet.models.Cell()
+    id_cell = SmartsheetCell()
     id_cell.column_id = smartsheet_sheet.columns[3].id
     id_cell.value = alert_data.id
 
     # Initialize the cell with the alert's creation date (time will be
     # truncated away).
-    created_at_date_only_cell = smartsheet.models.Cell()
+    created_at_date_only_cell = SmartsheetCell()
     created_at_date_only_cell.column_id = smartsheet_sheet.columns[4].id
     created_at_date_only_cell.value = alert_data.created_at.isoformat()
 
     # Initialize the cell with the alert's creation date and time.
-    created_at_cell = smartsheet.models.Cell()
+    created_at_cell = SmartsheetCell()
     created_at_cell.column_id = smartsheet_sheet.columns[5].id
     created_at_cell.value = str(alert_data.created_at.strftime(TIMESTAMP_FORMAT))
 
     # Initialize the cell with the alert's acknowledgement status.
-    ack_cell = smartsheet.models.Cell()
+    ack_cell = SmartsheetCell()
     ack_cell.column_id = smartsheet_sheet.columns[6].id
     ack_cell.value = str(alert_data.acknowledged)
 
     # Initialize the cell with the alert's status.
-    status_cell = smartsheet.models.Cell()
+    status_cell = SmartsheetCell()
     status_cell.column_id = smartsheet_sheet.columns[7].id
     status_cell.value = alert_data.status
 
     # Initialize the cell with the alert's source.
-    source_cell = smartsheet.models.Cell()
+    source_cell = SmartsheetCell()
     source_cell.column_id = smartsheet_sheet.columns[8].id
     source_cell.value = alert_data.source
 
     # Initialize the cell with the alert's count.
-    count_cell = smartsheet.models.Cell()
+    count_cell = SmartsheetCell()
     count_cell.column_id = smartsheet_sheet.columns[9].id
     count_cell.value = str(alert_data.count)
 
     # Initialize the cell with the alert's priority.
-    priority_cell = smartsheet.models.Cell()
+    priority_cell = SmartsheetCell()
     priority_cell.column_id = smartsheet_sheet.columns[10].id
     priority_cell.value = alert_data.priority
 
@@ -520,7 +583,7 @@ def get_quarterly_opsgenie_alerts(opsgenie_alert_tags: list[str]) -> list[Opsgen
     return quarterly_alerts
 
 
-def convert_opsgenie_alerts_to_smartsheet_rows(opsgenie_alerts: list[OpsgenieBaseAlert], smartsheet_sheet: smartsheet.Smartsheet.models.sheet.Sheet) -> list[smartsheet.Smartsheet.models.row.Row]:
+def convert_opsgenie_alerts_to_smartsheet_rows(opsgenie_alerts: list[OpsgenieBaseAlert], smartsheet_sheet: SmartsheetSheet) -> list[SmartsheetRow]:
     """
     Given a list of Opsgenie base alert objects and a desired Smartsheet sheet 
     object, convert the list of alerts to a list of Smartsheet row objects and
@@ -529,17 +592,17 @@ def convert_opsgenie_alerts_to_smartsheet_rows(opsgenie_alerts: list[OpsgenieBas
     Args:
         opsgenie_alerts (list[OpsgenieBaseAlert]): The list of Opsgenie alerts
             to convert to Smartsheet rows.
-        smartsheet_sheet (smartsheet.Smartsheet.models.sheet.Sheet): The 
+        smartsheet_sheet (SmartsheetSheet): The 
             desired Smartsheet the alerts should go into.
 
     Returns:
-        list[smartsheet.Smartsheet.models.row.Row]: The list of rows of the 
+        list[SmartsheetRow]: The list of rows of the 
         converted alert objects.
     """
 
     # For each opsgenie alert, convert it into a Smartsheet row and add it to
     # the returning list of Smartsheet rows.
-    all_alert_rows = list[smartsheet.Smartsheet.models.row.Row]()
+    all_alert_rows = list[SmartsheetRow]()
     for opsgenie_alert in opsgenie_alerts:
         opsgenie_alert_row = opsgenie_alert_to_row(opsgenie_alert, smartsheet_sheet)
         all_alert_rows.append(opsgenie_alert_row)
@@ -573,18 +636,18 @@ def put_opsgenie_data_into_smartsheet(customer_config: dict) -> None:
     add_rows_to_smartsheet(opsgenie_smartsheet, quarterly_opsgenie_alerts_rows)
 
 
-def servicenow_ticket_to_row(ticket_data: ServiceNowTicket, smartsheet_sheet: smartsheet.Smartsheet.models.sheet.Sheet) -> smartsheet.Smartsheet.models.row.Row:
+def servicenow_ticket_to_row(ticket_data: ServiceNowTicket, smartsheet_sheet: SmartsheetSheet) -> SmartsheetRow:
     """
     Given a ServiceNow ticket object and a valid Smartsheet sheet object, convert 
     the ticket's data into a Smartsheet row object.
 
     Args:
         ticket_data (ServiceNowTicket): The ticket data we want to convert.
-        smartsheet_sheet (smartsheet.Smartsheet.models.sheet.Sheet): The
+        smartsheet_sheet (SmartsheetSheet): The
             Smartsheet to create the rows for.
 
     Returns:
-        smartsheet.Smartsheet.models.row.Row: The Smartsheet row object
+        SmartsheetRow: The Smartsheet row object
             containing the ticket's data.
     """
 
@@ -593,76 +656,81 @@ def servicenow_ticket_to_row(ticket_data: ServiceNowTicket, smartsheet_sheet: sm
     ticket_row.to_top = True
 
     # Initialize the cell with the ticket's number.
-    number_cell = smartsheet.models.Cell()
+    number_cell = SmartsheetCell()
     number_cell.column_id = smartsheet_sheet.columns[0].id
     number_cell.value = ticket_data.number
 
     # Initialize the cell with the ticket's location.
-    location_cell = smartsheet.models.Cell()
+    location_cell = SmartsheetCell()
     location_cell.column_id = smartsheet_sheet.columns[1].id
     location_cell.value = ticket_data.location
 
     # Initialize the cell with the ticket's CMDB CI name.
-    ci_cell = smartsheet.models.Cell()
+    ci_cell = SmartsheetCell()
     ci_cell.column_id = smartsheet_sheet.columns[2].id
     ci_cell.value = ticket_data.cmdb_ci
 
     # Initialize the cell with the ticket's short description.
-    short_description_cell = smartsheet.models.Cell()
+    short_description_cell = SmartsheetCell()
     short_description_cell.column_id = smartsheet_sheet.columns[3].id
     short_description_cell.value = ticket_data.short_description
 
     # Initialize the cell with the ticket's state.
-    state_cell = smartsheet.models.Cell()
+    state_cell = SmartsheetCell()
     state_cell.column_id = smartsheet_sheet.columns[4].id
     state_cell.value = ticket_data.state
 
     # Initialize the cell with the ticket's category.
-    category_cell = smartsheet.models.Cell()
+    category_cell = SmartsheetCell()
     category_cell.column_id = smartsheet_sheet.columns[5].id
     category_cell.value = ticket_data.category
 
     # Initialize the cell with the ticket's priority.
-    priority_cell = smartsheet.models.Cell()
+    priority_cell = SmartsheetCell()
     priority_cell.column_id = smartsheet_sheet.columns[6].id
     priority_cell.value = ticket_data.priority
 
     # Initialize the cell with the ticket's risk.
-    risk_cell = smartsheet.models.Cell()
+    risk_cell = SmartsheetCell()
     risk_cell.column_id = smartsheet_sheet.columns[7].id
     risk_cell.value = ticket_data.risk
 
     # Initialize the cell with the ticket's assigned to.
-    assigned_to_cell = smartsheet.models.Cell()
+    assigned_to_cell = SmartsheetCell()
     assigned_to_cell.column_id = smartsheet_sheet.columns[8].id
     assigned_to_cell.value = ticket_data.assigned_to
 
     # Initialize the cell with the ticket's opened at date (time will be
     # truncated away).
-    opened_at_date_cell = smartsheet.models.Cell()
+    opened_at_date_cell = SmartsheetCell()
     opened_at_date_cell.column_id = smartsheet_sheet.columns[9].id
     opened_at_date_cell.value = ticket_data.opened_at.isoformat()
 
     # Initialize the cell with the ticket's opened at date and time.
-    opened_at_datetime_cell = smartsheet.models.Cell()
+    opened_at_datetime_cell = SmartsheetCell()
     opened_at_datetime_cell.column_id = smartsheet_sheet.columns[10].id
     opened_at_datetime_cell.value = str(ticket_data.opened_at.strftime(TIMESTAMP_FORMAT))
 
     # Initialize the cell with the ticket's updated by.
-    updated_by_cell = smartsheet.models.Cell()
+    updated_by_cell = SmartsheetCell()
     updated_by_cell.column_id = smartsheet_sheet.columns[11].id
     updated_by_cell.value = ticket_data.updated_by
 
     # Initialize the cell with the ticket's closed at date (time will be
     # truncated away).
-    closed_at_date_cell = smartsheet.models.Cell()
+    closed_at_date_cell = SmartsheetCell()
     closed_at_date_cell.column_id = smartsheet_sheet.columns[12].id
     closed_at_date_cell.value = '' if ticket_data.closed_at == None else ticket_data.closed_at.isoformat()
 
     # Initialize the cell with the ticket's closed at date and time.
-    closed_at_datetime_cell = smartsheet.models.Cell()
+    closed_at_datetime_cell = SmartsheetCell()
     closed_at_datetime_cell.column_id = smartsheet_sheet.columns[13].id
     closed_at_datetime_cell.value = '' if ticket_data.closed_at == None else str(ticket_data.closed_at.strftime(TIMESTAMP_FORMAT))
+
+    # Initialize the cell with the ticket's resolution time in days.
+    resolution_time_in_days_cell = SmartsheetCell()
+    resolution_time_in_days_cell.column_id = smartsheet_sheet.columns[14].id
+    resolution_time_in_days_cell.value = str(abs(round(ticket_data.resolve_time, 2))) if ticket_data.resolve_time != '' else ''
 
     # Update the row object with the all the cell objects.
     ticket_row.cells.append(number_cell)
@@ -679,19 +747,20 @@ def servicenow_ticket_to_row(ticket_data: ServiceNowTicket, smartsheet_sheet: sm
     ticket_row.cells.append(updated_by_cell)
     ticket_row.cells.append(closed_at_date_cell)
     ticket_row.cells.append(closed_at_datetime_cell)
+    ticket_row.cells.append(resolution_time_in_days_cell)
 
     # Return the row.
     return ticket_row
 
 
-def get_quarterly_servicenow_tickets(servicenow_company_name: str) -> list[ServiceNowTicket]:
+def get_quarterly_servicenow_tickets(servicenow_company_names: list[str]) -> list[ServiceNowTicket]:
     """
     Given a valid ServiceNow company name, return all supported ticket types
     within the past 90 days.
 
     Args:
-        servicenow_company_name (str): The company to gather quarterly ticket
-            data for.
+        servicenow_company_names (list[str]): The company names to gather
+            quarterly ticket data for.
 
     Returns:
         list[ServiceNowTicket]: A list of quarterly tickets for the company.
@@ -706,12 +775,15 @@ def get_quarterly_servicenow_tickets(servicenow_company_name: str) -> list[Servi
 
     # Build the query to get the quarterly tickets from the tables.
     date_90_days_ago = datetime.today() - timedelta(days=90)
-    tickets_last_90_days_query = (
-        pysnow.QueryBuilder()
-        .field('company.name').equals(servicenow_company_name)
-        .AND()
-        .field('sys_created_on').greater_than_or_equal(date_90_days_ago)
-    )
+    tickets_last_90_days_query = pysnow.QueryBuilder().field('sys_created_on').greater_than_or_equal(date_90_days_ago).AND()
+    query_ends_with_and = True
+    for company_name in servicenow_company_names:
+        # Check if this is the first loop so we exclude the "OR".
+        if query_ends_with_and:
+            tickets_last_90_days_query = tickets_last_90_days_query.field('company.name').equals(company_name)
+            query_ends_with_and = False
+        else:
+            tickets_last_90_days_query = tickets_last_90_days_query.OR().field('company.name').equals(company_name)
 
     # Gather quarterly ticket data from the incident table.
     servicenow_quarterly_incidents_response = servicenow_incident_table.get(
@@ -767,10 +839,13 @@ def get_quarterly_servicenow_tickets(servicenow_company_name: str) -> list[Servi
     logger.info('ServiceNow quarterly ticket data gathered!')
 
     # Return the quarterly tickets for this customer.
+    if len(all_servicenow_quarterly_tickets) > SMARTSHEET_MAX_DASHBOARD_ROW_COUNT:
+        return all_servicenow_quarterly_tickets[:SMARTSHEET_MAX_DASHBOARD_ROW_COUNT]
+    
     return all_servicenow_quarterly_tickets
 
 
-def convert_servicenow_tickets_to_smartsheet_rows(servicenow_tickets: list[ServiceNowTicket], smartsheet_sheet: smartsheet.Smartsheet.models.sheet.Sheet) -> list[smartsheet.Smartsheet.models.row.Row]:
+def convert_servicenow_tickets_to_smartsheet_rows(servicenow_tickets: list[ServiceNowTicket], smartsheet_sheet: SmartsheetSheet) -> list[SmartsheetRow]:
     """
     Given a list of ServiceNow tickets and a desired Smartsheet sheet object,
     convert the list of tickets to a list of Smartsheet row objects and return
@@ -779,17 +854,17 @@ def convert_servicenow_tickets_to_smartsheet_rows(servicenow_tickets: list[Servi
     Args:
         servicenow_tickets (list[ServiceNowTicket]): The list of ServiceNow tickets to
             convert to Smartsheet rows.
-        smartsheet_sheet (smartsheet.Smartsheet.models.sheet.Sheet): The
+        smartsheet_sheet (SmartsheetSheet): The
             desired Smartsheet the tickets should go into.
     
     Returns:
-        list[smartsheet.Smartsheet.models.row.Row]: The list of rows of the
+        list[SmartsheetRow]: The list of rows of the
             converted tickets.
     """
 
     # For each ticket, convert it into a Smartsheet row and add it to the
     # returning list of Smartsheet rows.
-    all_ticket_rows = list[smartsheet.Smartsheet.models.row.Row]()
+    all_ticket_rows = list[SmartsheetRow]()
     for servicenow_ticket in servicenow_tickets:
         servicenow_ticket_row = servicenow_ticket_to_row(servicenow_ticket, smartsheet_sheet)
         all_ticket_rows.append(servicenow_ticket_row)
@@ -808,7 +883,7 @@ def put_servicenow_data_into_smartsheet(customer_config: dict) -> None:
     """
 
     # Get the quarterly ServiceNow tickets for this customer.
-    quarterly_servicenow_tickets = get_quarterly_servicenow_tickets(customer_config['servicenow_company_name'])
+    quarterly_servicenow_tickets = get_quarterly_servicenow_tickets(customer_config['servicenow_company_names'])
 
     # Get a reference to this customer's ServiceNow ticket Smartsheet.
     servicenow_smartsheet = SMARTSHEET_CLIENT.Sheets.get_sheet(customer_config['smartsheet_servicenow_tickets_sheet_id'])
@@ -823,18 +898,18 @@ def put_servicenow_data_into_smartsheet(customer_config: dict) -> None:
     add_rows_to_smartsheet(servicenow_smartsheet, quarterly_servicenow_tickets_rows)
 
 
-def prtg_sensor_to_row(prtg_sensor: PRTGSensor, smartsheet_sheet: smartsheet.Smartsheet.models.sheet.Sheet) -> smartsheet.Smartsheet.models.row.Row:
+def prtg_sensor_to_row(prtg_sensor: PRTGSensor, smartsheet_sheet: SmartsheetSheet) -> SmartsheetRow:
     """
     Given a PRTG sensor object, convert the sensor's data into a Smartsheet row
     object.
 
     Args:
         prtg_sensor (PRTGSensor): The sensor data we want to convert.
-        smartsheet_sheet (smartsheet.Smartsheet.models.sheet.Sheet): The 
+        smartsheet_sheet (SmartsheetSheet): The 
             Smartsheet we want to insert the row into.
 
     Returns:
-        smartsheet.Smartsheet.models.row.Row: The Smartsheet row object 
+        SmartsheetRow: The Smartsheet row object 
             containing the sensor's data.
     """
 
@@ -843,28 +918,28 @@ def prtg_sensor_to_row(prtg_sensor: PRTGSensor, smartsheet_sheet: smartsheet.Sma
     sensor_row.to_top = True
 
     # Initialize the cell with the sensor's status.
-    status_cell = smartsheet.models.Cell()
+    status_cell = SmartsheetCell()
     status_cell.column_id = smartsheet_sheet.columns[0].id
     status_cell.value = prtg_sensor.status
 
     # Initialize the cell with the sensor's occurrance timestamp.
-    occurred_cell = smartsheet.models.Cell()
+    occurred_cell = SmartsheetCell()
     occurred_cell.column_id = smartsheet_sheet.columns[1].id
     occurred_cell.value = prtg_sensor.downtime_since
 
     # Initialize the cell with the sensor's name.
-    name_cell = smartsheet.models.Cell()
+    name_cell = SmartsheetCell()
     name_cell.column_id = smartsheet_sheet.columns[2].id
     name_cell.value = prtg_sensor.name
 
     # Initialize the cell with the sensor's probe / group / device.
-    probe_group_device_cell = smartsheet.models.Cell()
+    probe_group_device_cell = SmartsheetCell()
     probe_group_device_cell.column_id = smartsheet_sheet.columns[3].id
     probe_group_device_cell.value = prtg_sensor.probe + ' > ' + \
         prtg_sensor.group + ' > ' + prtg_sensor.device
 
     # Initialize the cell with the sensor's message.
-    message_cell = smartsheet.models.Cell()
+    message_cell = SmartsheetCell()
     message_cell.column_id = smartsheet_sheet.columns[4].id
     message_cell.value = prtg_sensor.message
 
@@ -933,10 +1008,13 @@ def get_alerting_prtg_sensors(prtg_instance_urls: list[str], prtg_api_keys: list
 
     # Return all the PRTG sensor data.
     logger.info('PRTG sensor data gathered!')
+    if len(all_prtg_sensors) > SMARTSHEET_MAX_DASHBOARD_ROW_COUNT:
+        return all_prtg_sensors[:SMARTSHEET_MAX_DASHBOARD_ROW_COUNT]
+    
     return all_prtg_sensors
     
 
-def convert_prtg_sensors_to_smartsheet_rows(prtg_sensors: list[PRTGSensor], smartsheet_sheet: smartsheet.Smartsheet.models.sheet.Sheet) -> list[smartsheet.Smartsheet.models.row.Row]:
+def convert_prtg_sensors_to_smartsheet_rows(prtg_sensors: list[PRTGSensor], smartsheet_sheet: SmartsheetSheet) -> list[SmartsheetRow]:
     """
     Given a list of PRTG sensors and a desired Smartsheet sheet object, convert
     the list of sensors to a list of Smartsheet row objects and return the list
@@ -945,17 +1023,17 @@ def convert_prtg_sensors_to_smartsheet_rows(prtg_sensors: list[PRTGSensor], smar
     Args:
         prtg_sensors (list[PRTGSensor]): The list of PRTG sensors to convert to
             Smartsheet rows.
-        smartsheet_sheet (smartsheet.Smartsheet.models.sheet.Sheet): The
+        smartsheet_sheet (SmartsheetSheet): The
             desired Smartsheet the sensors should go into.
     
     Returns:
-        list[smartsheet.Smartsheet.models.row.Row]: The list of rows of the
+        list[SmartsheetRow]: The list of rows of the
             converted sensors.
     """
     
     # For each sensor, convert it into a Smartsheet row and add it to the
     # returning list of Smartsheet rows.
-    all_sensor_rows = list[smartsheet.Smartsheet.models.row.Row]()
+    all_sensor_rows = list[SmartsheetRow]()
     for prtg_sensor in prtg_sensors:
         prtg_sensor_row = prtg_sensor_to_row(prtg_sensor, smartsheet_sheet)
         all_sensor_rows.append(prtg_sensor_row)
@@ -972,6 +1050,11 @@ def put_prtg_sensor_data_into_smartsheet(customer_config: dict) -> None:
     Args:
         customer_config (dict): The customer's configuration.
     """
+    
+    # Check if there are no PRTG instance URLs in the config.
+    if len(customer_config['prtg_instance_urls']) == 0:
+        logger.info(f'No PRTG instances set for {customer_config['customer_name']}!')
+        return
 
     # Get the current alerting PRTG sensors for this customer.
     current_alerting_prtg_sensors = get_alerting_prtg_sensors(
@@ -993,6 +1076,26 @@ def put_prtg_sensor_data_into_smartsheet(customer_config: dict) -> None:
     add_rows_to_smartsheet(prtg_smartsheet, current_alerting_prtg_sensors_rows)
 
 
+def put_customer_data_into_smartsheets(customer_config: dict) -> None:
+    """
+    Given a customer configuration, get their quarterly Opsgenie alerts,
+    quarterly ServiceNow tickets, and the current non-online PRTG sensor data
+    and push it into their own respective Smartsheets.
+
+    Args:
+        customer_config (dict): The customer's configuration.
+    """
+    
+    # Push this customer's Opsgenie alert data into a Smartsheet.
+    put_opsgenie_data_into_smartsheet(customer_config)
+
+    # Push this customer's ServiceNow tickets into a Smartsheet.
+    put_servicenow_data_into_smartsheet(customer_config)
+
+    # Push this customer's current PRTG sensor alerts into a Smartsheet.
+    put_prtg_sensor_data_into_smartsheet(customer_config)
+
+
 def run():
     """
     Runs the Quarterly Business Report automation!
@@ -1004,14 +1107,8 @@ def run():
     for customer_config in CUSTOMER_CONFIGS:
         logger.info(f'Beginning QBR automation for "{customer_config['customer_name']}"...')
 
-        # Push this customer's Opsgenie alert data into a Smartsheet.
-        put_opsgenie_data_into_smartsheet(customer_config)
-
-        # Push this customer's ServiceNow tickets into a Smartsheet.
-        put_servicenow_data_into_smartsheet(customer_config)
-
-        # Push this customer's current PRTG sensor alerts into a Smartsheet.
-        put_prtg_sensor_data_into_smartsheet(customer_config)
+        # Push all this customer's new data into their respective Smartsheets.
+        put_customer_data_into_smartsheets(customer_config)
 
         logger.info(f'Completed QBR automation for "{customer_config['customer_name']}"!')
     
