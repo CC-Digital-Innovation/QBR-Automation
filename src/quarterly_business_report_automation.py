@@ -31,6 +31,12 @@ OPSGENIE_API_KEY = os.getenv('OPSGENIE_API_KEY')
 OPSGENIE_MAX_RESPONSE_LIMIT = 100
 
 # Initialize PRTG constant global variables.
+PRTG_01_USE_DEFAULTS_KEYWORD = 'prtg_01_default_instance'
+PRTG_01_DEFAULT_INSTANCE_URL = os.getenv('PRTG_01_DEFAULT_INSTANCE_URL')
+PRTG_01_DEFAULT_API_KEY = os.getenv('PRTG_01_DEFAULT_API_KEY')
+PRTG_02_USE_DEFAULTS_KEYWORD = 'prtg_02_default_instance'
+PRTG_02_DEFAULT_INSTANCE_URL = os.getenv('PRTG_02_DEFAULT_INSTANCE_URL')
+PRTG_02_DEFAULT_API_KEY = os.getenv('PRTG_02_DEFAULT_API_KEY')
 PRTG_MAX_RESPONSE_LIMIT = 50000
 
 # Initialize ServiceNow constant global variables.
@@ -57,8 +63,6 @@ SMARTSHEET_MAX_DASHBOARD_ROW_COUNT = 2500
 SMARTSHEET_MAX_ROW_DELETION = 100
 
 # Initialize other constant global variables.
-# Pretty format: "%m/%d/%Y %I:%M:%S %p"
-# MariaDB datetime format: "%Y-%m-%d %H:%M:%S.%f"
 TIMESTAMP_FORMAT = "%Y-%m-%d %H:%M:%S.%f"
 
 
@@ -624,7 +628,7 @@ def put_opsgenie_data_into_smartsheet(customer_config: dict) -> None:
     quarterly_opsgenie_alerts = get_quarterly_opsgenie_alerts(customer_config['opsgenie_tags'])
 
     # Get a reference to this customer's Opsgenie alerts Smartsheet.
-    opsgenie_smartsheet = SMARTSHEET_CLIENT.Sheets.get_sheet(customer_config['smartsheet_opsgenie_alerts_sheet_id'])
+    opsgenie_smartsheet = SMARTSHEET_CLIENT.Sheets.get_sheet(customer_config['smartsheet_sheet_ids']['opsgenie_alerts'])
 
     # Convert the alerts to Smartsheet rows.
     quarterly_opsgenie_alerts_rows = convert_opsgenie_alerts_to_smartsheet_rows(quarterly_opsgenie_alerts, opsgenie_smartsheet)
@@ -886,7 +890,7 @@ def put_servicenow_data_into_smartsheet(customer_config: dict) -> None:
     quarterly_servicenow_tickets = get_quarterly_servicenow_tickets(customer_config['servicenow_company_names'])
 
     # Get a reference to this customer's ServiceNow ticket Smartsheet.
-    servicenow_smartsheet = SMARTSHEET_CLIENT.Sheets.get_sheet(customer_config['smartsheet_servicenow_tickets_sheet_id'])
+    servicenow_smartsheet = SMARTSHEET_CLIENT.Sheets.get_sheet(customer_config['smartsheet_sheet_ids']['servicenow_tickets'])
 
     # Convert the alerts to Smartsheet rows.
     quarterly_servicenow_tickets_rows = convert_servicenow_tickets_to_smartsheet_rows(quarterly_servicenow_tickets, servicenow_smartsheet)
@@ -954,18 +958,14 @@ def prtg_sensor_to_row(prtg_sensor: PRTGSensor, smartsheet_sheet: SmartsheetShee
     return sensor_row
 
 
-def get_alerting_prtg_sensors(prtg_instance_urls: list[str], prtg_api_keys: list[str], prtg_probe_substrings: list[str]) -> list[PRTGSensor]:
+def get_alerting_prtg_sensors(prtg_instances: list[dict]) -> list[PRTGSensor]:
     """
     Return all non-online sensors from all provided PRTG instances with their
-    respective credentials from the provided probe names.
+    respective credentials across all probes.
 
     Args:
-        prtg_instance_urls (list[str]): A list of all PRTG instances to gather
-            non-online sensors for.
-        prtg_api_keys (list[str]): A list of PRTG API keys for their
-            respective instances.
-        prtg_probe_substrings (list[str]): A list of probe substrings to 
-            specify which sensors to gather from amongst the PRTG instances.
+        prtg_instances_data(list[dict]): A list of all PRTG instances data for 
+            this customer.
 
     Returns:
         list[PRTGSensor]: A list of hard-typed PRTG sensor objects.
@@ -975,20 +975,38 @@ def get_alerting_prtg_sensors(prtg_instance_urls: list[str], prtg_api_keys: list
 
     # Get the raw sensors from each PRTG instance.
     all_prtg_sensors = list[PRTGSensor]()
-    for index,prtg_instance_url in enumerate(prtg_instance_urls):
-        prtg_raw_sensors_resp = \
-            requests.get(url=f"{prtg_instance_url}/api/table.xml",
-                        params={
-                            'content': 'sensors',
-                            'columns': 'name,parentid,downtimesince,status,' \
-                                    'probe,group,device,message',
-                            'filter_probe': [f'@sub({probe_substring})' for probe_substring in prtg_probe_substrings],
-                            'filter_status': '@neq(3)',
-                            'output': 'json',
-                            'count': str(PRTG_MAX_RESPONSE_LIMIT),
-                            'apitoken': prtg_api_keys[index]
-                        }
-            )
+    for prtg_instance_data in prtg_instances:
+        # Check if we are using a default PRTG instance.
+        if prtg_instance_data['url'] == PRTG_01_USE_DEFAULTS_KEYWORD:
+            full_prtg_url = f'{PRTG_01_DEFAULT_INSTANCE_URL}/api/table.xml'
+            prtg_api_key = PRTG_01_DEFAULT_API_KEY
+        elif prtg_instance_data['url'] == PRTG_02_USE_DEFAULTS_KEYWORD:
+            full_prtg_url = f'{PRTG_02_DEFAULT_INSTANCE_URL}/api/table.xml'
+            prtg_api_key = PRTG_02_DEFAULT_API_KEY
+        else:
+            full_prtg_url = f'{prtg_instance_data['url']}/api/table.xml'
+            prtg_api_key = prtg_instance_data['api_key']
+            
+        # Create the parameters for the PRTG API payload.
+        prtg_api_parameters = {
+                'content': 'sensors',
+                'columns': 'name,parentid,downtimesince,status,' \
+                           'probe,group,device,message',
+                'filter_status': '@neq(3)',
+                'output': 'json',
+                'count': str(PRTG_MAX_RESPONSE_LIMIT),
+                'apitoken': prtg_api_key
+        }
+        
+        # Check if we need to add any filters to the probe.
+        if len(prtg_instance_data['probe_substrings']) != 0:
+            prtg_api_parameters['filter_probe'] = [f'@sub({probe_substring})' for probe_substring in prtg_instance_data['probe_substrings']]
+            
+        # Send the request to PRTG.
+        prtg_raw_sensors_resp = requests.get(
+            url=full_prtg_url,
+            params=prtg_api_parameters
+        )
         
         # Extract just the sensors from the response.
         prtg_raw_sensors = prtg_raw_sensors_resp.json()['sensors']
@@ -1004,7 +1022,7 @@ def get_alerting_prtg_sensors(prtg_instance_urls: list[str], prtg_api_keys: list
 
         # Add this PRTG instance's sensors to the customer's global sensor
         # list.
-        all_prtg_sensors = all_prtg_sensors + prtg_sensors
+        all_prtg_sensors.extend(prtg_sensors)
 
     # Return all the PRTG sensor data.
     logger.info('PRTG sensor data gathered!')
@@ -1052,19 +1070,17 @@ def put_prtg_sensor_data_into_smartsheet(customer_config: dict) -> None:
     """
     
     # Check if there are no PRTG instance URLs in the config.
-    if len(customer_config['prtg_instance_urls']) == 0:
+    if len(customer_config['prtg_instances']) == 0:
         logger.info(f'No PRTG instances set for {customer_config['customer_name']}!')
         return
 
     # Get the current alerting PRTG sensors for this customer.
     current_alerting_prtg_sensors = get_alerting_prtg_sensors(
-        customer_config['prtg_instance_urls'],
-        customer_config['prtg_api_keys'],
-        customer_config['prtg_probe_substrings']
+        customer_config['prtg_instances']
     )
 
     # Get a reference to this customer's PRTG sensor Smartsheet.
-    prtg_smartsheet = SMARTSHEET_CLIENT.Sheets.get_sheet(customer_config['smartsheet_prtg_alerts_sheet_id'])
+    prtg_smartsheet = SMARTSHEET_CLIENT.Sheets.get_sheet(customer_config['smartsheet_sheet_ids']['prtg_alerts'])
 
     # Convert the sensors to Smartsheet rows.
     current_alerting_prtg_sensors_rows = convert_prtg_sensors_to_smartsheet_rows(current_alerting_prtg_sensors, prtg_smartsheet)
@@ -1096,7 +1112,7 @@ def put_customer_data_into_smartsheets(customer_config: dict) -> None:
     put_prtg_sensor_data_into_smartsheet(customer_config)
 
 
-def run():
+def main():
     """
     Runs the Quarterly Business Report automation!
     """
@@ -1116,4 +1132,4 @@ def run():
 
 
 if __name__ == "__main__":
-    run()
+    main()

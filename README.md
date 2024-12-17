@@ -18,7 +18,7 @@ presenting quarterly data more streamlined to help save PMs time.
 - opsgenie_sdk
 - pysnow
 - python-dotenv
-- python-magic-bin (only needed if running on a Windows system)
+- python-magic (use "python-magic-bin" if running on a Windows system)
 - requests
 - smartsheet-python-sdk
 
@@ -47,6 +47,11 @@ encounter any problems, please log an
 5. Submit a pull request ツ
 
 ## History
+-  version 1.2.1 - 2024/12/17
+    - Added support for multiple PRTG instances for each customer
+    - Added support for timezones to trigger this script more consistently
+
+
 -  version 1.2.0 - 2024/10/29
     - Capped data rows to 2,500 for Smartsheet so we can use dashboards
     - Added support for customers in ServiceNow that have multiple names
