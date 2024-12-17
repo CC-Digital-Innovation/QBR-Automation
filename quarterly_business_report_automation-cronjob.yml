@@ -19,12 +19,14 @@ spec:
             vault.hashicorp.com/agent-inject-secret-prtg: 'secret/prtg'
             vault.hashicorp.com/agent-inject-template-prtg: |
               {{- with secret "secret/prtg" -}}
-                export PRTG_DEFAULT_INSTANCE_URL="{{ .Data.data.instance_url }}"
+                export PRTG_01_DEFAULT_INSTANCE_URL="{{ .Data.data.instance_url_01 }}"
+                export PRTG_02_DEFAULT_INSTANCE_URL="{{ .Data.data.instance_url_02 }}"
               {{- end }}
             vault.hashicorp.com/agent-inject-secret-prtg-qbr_auto: 'secret/prtg/qbr_auto'
             vault.hashicorp.com/agent-inject-template-prtg-qbr_auto: |
               {{- with secret "secret/prtg/qbr_auto" -}}
-                export PRTG_DEFAULT_API_KEY="{{ .Data.data.api_key }}"
+                export PRTG_01_DEFAULT_API_KEY="{{ .Data.data.api_key_01 }}"
+                export PRTG_02_DEFAULT_API_KEY="{{ .Data.data.api_key_02 }}"
               {{- end }}
             vault.hashicorp.com/agent-inject-secret-servicenow: 'secret/servicenow'
             vault.hashicorp.com/agent-inject-template-servicenow: |
