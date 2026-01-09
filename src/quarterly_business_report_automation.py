@@ -1,27 +1,26 @@
-from datetime import datetime, timedelta
 import json
 import os
+from datetime import datetime, timedelta
 
-from dotenv import load_dotenv
-from loguru import logger
+import dotenv
 import opsgenie_sdk
-from opsgenie_sdk import ApiException as OpsgenieApiException
-from opsgenie_sdk import BaseAlert as OpsgenieBaseAlert
 import pysnow
 import requests
 import smartsheet
-import smartsheet.sheets
-from smartsheet.models.sheet import Sheet as SmartsheetSheet
-from smartsheet.models.row import Row as SmartsheetRow
-from smartsheet.models.cell import Cell as SmartsheetCell
+from loguru import logger
+from opsgenie_sdk import ApiException as OpsgenieApiException
+from opsgenie_sdk import BaseAlert as OpsgenieBaseAlert
 from smartsheet import Smartsheet as SmartsheetClient
+from smartsheet.models.cell import Cell as SmartsheetCell
+from smartsheet.models.row import Row as SmartsheetRow
+from smartsheet.models.sheet import Sheet as SmartsheetSheet
 
 
 # ====================== Environment / Global Variables =======================
-load_dotenv(override=True)
+dotenv.load_dotenv(override=True)
 
 # Initialize customer constant global variables.
-with open('/vault/secrets/qbr_auto', 'r') as file:
+with open('./vault/secrets/qbr_auto', 'r') as file:
     CUSTOMER_CONFIGS_FILE_JSON = json.load(file)
 CUSTOMER_CONFIGS_STRING = CUSTOMER_CONFIGS_FILE_JSON['data']['customer_configs']
 CUSTOMER_CONFIGS = json.loads(CUSTOMER_CONFIGS_STRING)
@@ -57,8 +56,7 @@ SERVICENOW_TICKET_FIELDS = [
 SERVICENOW_DATETIME_FORMAT = "%Y-%m-%d %I:%M:%S %p"
 
 # Initialize Smartsheet constant global variables.
-SMARTSHEET_API_KEY = os.getenv('SMARTSHEET_API_KEY')
-SMARTSHEET_CLIENT = SmartsheetClient(access_token=SMARTSHEET_API_KEY)
+SMARTSHEET_CLIENT = SmartsheetClient()
 SMARTSHEET_MAX_DASHBOARD_ROW_COUNT = 2500
 SMARTSHEET_MAX_ROW_DELETION = 100
 
