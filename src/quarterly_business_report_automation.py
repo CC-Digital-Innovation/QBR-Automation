@@ -20,7 +20,7 @@ from smartsheet.models.sheet import Sheet as SmartsheetSheet
 dotenv.load_dotenv(override=True)
 
 # Initialize customer constant global variables.
-with open('./vault/secrets/qbr_auto', 'r') as file:
+with open('/vault/secrets/qbr_auto', 'r') as file:
     CUSTOMER_CONFIGS_FILE_JSON = json.load(file)
 CUSTOMER_CONFIGS_STRING = CUSTOMER_CONFIGS_FILE_JSON['data']['customer_configs']
 CUSTOMER_CONFIGS = json.loads(CUSTOMER_CONFIGS_STRING)
